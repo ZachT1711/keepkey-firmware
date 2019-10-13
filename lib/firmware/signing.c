@@ -505,7 +505,8 @@ void phase2_request_next_input(void)
 /// p2pkh + ph2sh-p2wsh + p2wsh accounts.
 static bool isCrossAccountSegwitChangeAllowed(
     const uint32_t *lhs_address_n, size_t lhs_address_n_count,
-    const uint32_t *rhs_address_n, size_t rhs_address_n_count)
+    const uint32_t *rhs_address_n, size_t rhs_address_n_count,
+    const OutputScriptType *rhs_script_type)
 {
 	size_t count = rhs_address_n_count;
 	if (count < 5)
@@ -530,6 +531,23 @@ static bool isCrossAccountSegwitChangeAllowed(
 	    out_purpose != (0x80000000|49) &&
 	    out_purpose != (0x80000000|84))
 		return false;
+
+	// Don't *creating* allow mixed-mode change if the script type doesn't
+	// match the purpose. On the other hand, allow spending it even if it's
+	// "wrong".
+	if (rhs_script_type) {
+		if (out_purpose == (0x80000000|44) &&
+		    *rhs_script_type != InputScriptType_SPENDADDRESS)
+			return false;
+
+		if (out_purpose == (0x80000000|49) &&
+		    *rhs_script_type != InputScriptType_SPENDP2SHWITNESS)
+			return false;
+
+		if (out_purpose == (0x80000000|84) &&
+		    *rhs_script_type != InputScriptType_SPENDWITNESS)
+			return false;
+	}
 
 	// coin_type
 	if (lhs_address_n[count - 4] != rhs_address_n[count - 4])
@@ -577,7 +595,8 @@ void extract_input_bip32_path(const TxInputType *tinput)
 		return;
 	}
 	if (isCrossAccountSegwitChangeAllowed(in_address_n, in_address_n_count,
-	                                      tinput->address_n, tinput->address_n_count))
+	                                      tinput->address_n, tinput->address_n_count,
+	                                      NULL))
 		return;
 	// check that the bip32 path up to the account matches
 	if (memcmp(in_address_n, tinput->address_n,
@@ -591,7 +610,8 @@ void extract_input_bip32_path(const TxInputType *tinput)
 bool check_change_bip32_path(const TxOutputType *toutput)
 {
 	if (isCrossAccountSegwitChangeAllowed(in_address_n, in_address_n_count,
-	                                      toutput->address_n, toutput->address_n_count))
+	                                      toutput->address_n, toutput->address_n_count,
+	                                      &toutput->script_type))
 		return true;
 
 	size_t count = toutput->address_n_count;
@@ -628,7 +648,8 @@ bool compile_input_script_sig(TxInputType *tinput)
 			|| count != in_address_n_count
 			|| (0 != memcmp(in_address_n, tinput->address_n, (count - 2) * sizeof(uint32_t)) &&
 			    !isCrossAccountSegwitChangeAllowed(in_address_n, in_address_n_count,
-			                                       tinput->address_n, tinput->address_n_count))) {
+			                                       tinput->address_n, tinput->address_n_count,
+			                                       NULL))) {
 			return false;
 		}
 	}
