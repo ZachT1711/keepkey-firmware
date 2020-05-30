@@ -1,34 +1,13 @@
+# Use the latest 2.1 version of CircleCI pipeline process engine. See: https://circleci.com/docs/2.0/configuration-reference
 version: 2.1
-jobs:
-  emulator-build-test:
-    docker:
-      - image: circleci/python:2.7.15
-    steps:
-      - checkout
-      - run:
-          name: Update Submodules
-          command: |
-            git submodule update --init --recursive
-      - setup_remote_docker
-      - run:
-          name: Emulator Tests
-          command: |
-            pushd ./scripts/emulator
-            set +e
-            docker-compose up --build firmware-unit
-            docker-compose up --build bridge-tests
-            docker-compose up --build python-keepkey
-            set -e
-            docker cp "$(docker-compose ps -q firmware-unit)":/kkemu/test-reports/. ../../test-reports/
-            docker cp "$(docker-compose ps -q bridge-tests)":/kkemu/test-reports/. ../../test-reports/
-            docker cp "$(docker-compose ps -q python-keepkey)":/kkemu/test-reports/. ../../test-reports/
-            popd
-            [ "$(cat test-reports/python-keepkey/status)$(cat test-reports/bridge-tests/status)$(cat test-reports/firmware-unit/status)" == "000" ] || exit 1
-      - store_test_results:
-          path: test-reports
+# Use a package of configuration called an orb.
+orbs:
+  # Declare a dependency on the welcome-orb
+  welcome: circleci/welcome-orb@0.4.1
+# Orchestrate or schedule a set of jobs
 workflows:
-  version: 2
-  emulator:
+  # Name the workflow "welcome"
+  welcome:
+    # Run the welcome/run job in its own container
     jobs:
-      - emulator-build-test
-
+      - welcome/run
